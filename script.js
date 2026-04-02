@@ -1,60 +1,112 @@
-let current = 0;
-
 const slider = document.getElementById('slider');
-const slides = document.querySelectorAll('.slide');
 const container = document.querySelector('.slider-wrapper');
-
-
 const sizeDivider = 2.5;
+
+const originalSlides = Array.from(document.querySelectorAll('.slide'));
+const total = originalSlides.length;
+
+originalSlides.slice().reverse().forEach(s => slider.prepend(s.cloneNode(true)));
+originalSlides.forEach(s => slider.append(s.cloneNode(true)));
+
+let slides = Array.from(document.querySelectorAll('.slide'));
+let current = total;
+let isAnimating = false;
 
 function applySize() {
     const containerWidth = container.offsetWidth;
     const slideW = containerWidth / sizeDivider;
-    const slideH = slideW * 0.6; // height is 60% of width
-
+    const slideH = slideW * 0.6;
     slides.forEach(function(slide) {
         slide.style.minWidth = slideW + 'px';
         slide.style.height = slideH + 'px';
     });
 }
 
-function update() {
-    const slideWidth = slides[0].offsetWidth + 20; // width + margin
+function getTranslateX(index) {
+    const slideWidth = slides[0].offsetWidth + 20;
     const containerWidth = container.offsetWidth;
     const centerOffset = containerWidth / 2 - slideWidth / 2;
-
-    slider.style.transform = 'translateX(' + (-current * slideWidth + centerOffset) + 'px)';
-
-
-
-    slides.forEach(function(slide, index) {
-        slide.classList.remove('active');
-        if (index === current) {
-            slide.classList.add('active');
-        }
-    });
-
-
-
+    return -index * slideWidth + centerOffset;
 }
 
-function next() {
-    if (current < slides.length - 1) {
-        current = current + 1;
-    } else {
-        current = 0;
+// Freeze all slide transitions (scale/opacity won't animate during jump)
+function freezeSlides() {
+    slides.forEach(function(slide) {
+        slide.style.transition = 'none';
+    });
+}
+
+// Restore slide transitions after a frame
+function thawSlides() {
+    requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+            slides.forEach(function(slide) {
+                slide.style.transition = '';
+            });
+        });
+    });
+}
+
+function updateActive(index) {
+    slides.forEach(function(slide, i) {
+        slide.classList.toggle('active', i === index);
+    });
+}
+
+function jumpTo(newIndex) {
+    // Freeze slide transitions so scale/opacity don't animate
+    freezeSlides();
+
+    // Swap active class instantly (no animation)
+    updateActive(newIndex);
+
+    // Snap slider position instantly
+    slider.style.transition = 'none';
+    slider.style.transform = 'translateX(' + getTranslateX(newIndex) + 'px)';
+
+    // Flush everything in one paint
+    slider.offsetHeight;
+
+    current = newIndex;
+
+    // Re-enable slide transitions after two frames (safe margin)
+    thawSlides();
+}
+
+slider.addEventListener('transitionend', function(e) {
+    if (e.target !== slider) return;
+
+    if (current >= total * 2) {
+        jumpTo(current - total);
+    } else if (current < total) {
+        jumpTo(current + total);
     }
-    update();
+
+    isAnimating = false;
+});
+
+function next() {
+    if (isAnimating) return;
+    isAnimating = true;
+    current++;
+    updateActive(current);
+    slider.style.transition = 'transform 0.4s ease';
+    slider.style.transform = 'translateX(' + getTranslateX(current) + 'px)';
 }
 
 function prev() {
-    if (current > 0) {
-        current = current - 1;
-    } else {
-        current = slides.length - 1;
-    }
-    update();
+    if (isAnimating) return;
+    isAnimating = true;
+    current--;
+    updateActive(current);
+    slider.style.transition = 'transform 0.4s ease';
+    slider.style.transform = 'translateX(' + getTranslateX(current) + 'px)';
 }
 
 applySize();
-update();
+freezeSlides();
+updateActive(current);
+slider.style.transition = 'none';
+slider.style.transform = 'translateX(' + getTranslateX(current) + 'px)';
+slider.offsetHeight;
+thawSlides();
